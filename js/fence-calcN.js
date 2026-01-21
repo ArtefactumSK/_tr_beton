@@ -1,4 +1,5 @@
-(function($) {
+
+    (function($) {
     function formatNumber(number) {
         return number.toFixed(2)
             .replace(/\B(?=(\d{3})+(?!\d))/g, ' ')
@@ -40,6 +41,34 @@
             return ''; // Vráti prázdny reťazec, aby neblokovalo formulár
         }
     }
+    function getGFNumber(formId, fieldId) {
+        const el = document.querySelector('#input_' + formId + '_' + fieldId);
+        if (!el) {
+            console.warn('[GF] pole nenájdené:', formId, fieldId);
+            return 0;
+        }
+    
+        // 1) vyčisti formát (medzery, tisíce)
+        let raw = (el.value ?? '').toString().trim();
+        raw = raw.replace(/\s+/g, '');     // odstráni medzery
+        raw = raw.replace(',', '.');       // čiarka -> bodka
+    
+        let val = parseFloat(raw);
+        if (isNaN(val)) return 0;
+    
+        // 2) Heuristika: ak prišla hodnota ako "2200" namiesto "22.00",
+        //    tak je to pravdepodobne posunuté o 2 desatinné miesta (centy).
+        //    Platí pre jednotkové ceny, ktoré očakávame v rozsahu cca 5–100 €.
+        if (val >= 100 && Number.isInteger(val)) {
+            const scaled = val / 100;
+            console.warn('[GF] cena vyzerá ako centy -> prepočítavam', { fieldId, raw, val, scaled });
+            val = scaled;
+        }
+    
+        return val;
+    }
+    
+    
 
     function calculateFence() {
         console.log('calculateFence spustený'); // Debug
@@ -76,10 +105,25 @@
             var postHeight = heightVal === 6 ? 260 : heightVal === 7 ? 280 : heightVal === 8 ? 320 : 340;
 
             // Ceny
-            var boardPrice = 12.50; // Cena pre 250_30_5
-            var hPostPrice = heightVal === 6 ? 21.00 : heightVal === 7 ? 24.50 : heightVal === 8 ? 25.50 : 36.00;
-            var uPostPrice = heightVal === 6 ? 11.00 : heightVal === 7 ? 12.50 : heightVal === 8 ? 14.50 : 19.00;
+            var boardPrice = 0; // Cena pre 250_30_5
+            var formId = 7;
 
+            var hPostPrice =
+                heightVal === 6 ? getGFNumber(formId,  10 /* ID cena_h_stlp_260 */ ) :
+                heightVal === 7 ? getGFNumber(formId,  11 /* ID cena_h_stlp_280 */ ) :
+                heightVal === 8 ? getGFNumber(formId,  12 /* ID cena_h_stlp_320 */ ) :
+                                getGFNumber(formId,  13 /* ID cena_h_stlp_340 */ );
+
+            var uPostPrice =
+                heightVal === 6 ? getGFNumber(formId,  14 /* ID cena_u_stlp_260 */ ) :
+                heightVal === 7 ? getGFNumber(formId,  15 /* ID cena_u_stlp_280 */ ) :
+                heightVal === 8 ? getGFNumber(formId,  16 /* ID cena_u_stlp_320 */ ) :
+                                getGFNumber(formId,  17 /* ID cena_u_stlp_340 */ );
+
+            console.log('[GF PRICES]', {
+                hPostPrice,
+                uPostPrice
+            });
             var totalPriceNoVAT = (totalBoards * boardPrice) + (totalHPosts * hPostPrice) + (totalUPosts * uPostPrice);
             var totalPriceWithVAT = totalPriceNoVAT * 1.23;
 
@@ -99,91 +143,123 @@
 
             var totalWeight = boardsWeight + hPostsWeight + uPostsWeight;
             var totalWeightInTons = totalWeight / 1000;
-
+            
+            console.log('[DEBUG][PRICES]', {
+                boardPrice,
+                hPostPrice,
+                uPostPrice
+            });
             // Aktualizácia polí
-            $('#input_8_18').val(totalFields);
-            $('#input_8_19').val(totalBoards);
-            $('#input_8_20').val(totalHPosts);
-            $('#input_8_21').val(totalUPosts);
-            $('#input_8_22').val(formatNumber(totalPriceNoVAT)); // Formát 5 773,00
-            $('#input_8_23').val(formatNumber(totalPriceWithVAT)); // Formát 7 100,80
+            $('#input_7_18').val(totalFields);
+            $('#input_7_19').val(totalBoards);
+            $('#input_7_20').val(totalHPosts);
+            $('#input_7_21').val(totalUPosts);
+            /* $('#input_7_22').val(formatNumber(totalPriceNoVAT)); // Formát 5 773,00
+            $('#input_7_23').val(formatNumber(totalPriceWithVAT)); // Formát 7 100,80 */
+            // Number polia musia dostať RAW hodnotu (bodka, bez medzier)
+            $('#input_7_22').val(totalPriceNoVAT.toFixed(2));
+            $('#input_7_23').val(totalPriceWithVAT.toFixed(2));
+
+            // Lokalizované zobrazenie (pre UI) – zapisujeme ako text vedľa poľa
+            var displayNoVat = formatNumber(totalPriceNoVAT);
+            var displayVat   = formatNumber(totalPriceWithVAT);
+
+            // Bez DPH
+            var $noVatField = $('#field_7_22 .ginput_container');
+            if ($noVatField.length) {
+            // ak je input vnútri, neznič ho – pridaj/aktualizuj label
+            if (!$noVatField.find('.calc-display').length) {
+                $noVatField.append('<div class="calc-display" style="margin-top:6px;font-weight:700;"></div>');
+            }
+            $noVatField.find('.calc-display').text(displayNoVat);
+            }
+
+            // S DPH
+            var $vatField = $('#field_7_23 .ginput_container');
+            if ($vatField.length) {
+            if (!$vatField.find('.calc-display').length) {
+                $vatField.append('<div class="calc-display" style="margin-top:6px;font-weight:700;"></div>');
+            }
+            $vatField.find('.calc-display').text(displayVat);
+            }
+
 
             // Zápis cien do skrytých polí
-            if ($('#input_8_47').length) {
-                $('#input_8_47').val(totalPriceNoVAT.toFixed(2)); // Cena bez DPH, napr. 5773.00
+            if ($('#input_7_47').length) {
+                $('#input_7_47').val(totalPriceNoVAT.toFixed(2)); // Cena bez DPH, napr. 5773.00
             } else {
-                console.warn('Skryté pole input_8_47 neexistuje');
+                console.warn('Skryté pole input_7_47 neexistuje');
             }
-            if ($('#input_8_48').length) {
-                $('#input_8_48').val(totalPriceWithVAT.toFixed(2)); // Cena s DPH, napr. 7100.80
+            if ($('#input_7_48').length) {
+                $('#input_7_48').val(totalPriceWithVAT.toFixed(2)); // Cena s DPH, napr. 7100.80
             } else {
-                console.warn('Skryté pole input_8_48 neexistuje');
+                console.warn('Skryté pole input_7_48 neexistuje');
             }
 
             // Zápis hmotností do skrytých polí
-            if ($('#input_8_36').length) {
-                $('#input_8_36').val(boardsWeight); // Hmotnosť dosiek (kg)
+            if ($('#input_7_36').length) {
+                $('#input_7_36').val(boardsWeight); // Hmotnosť dosiek (kg)
             } else {
-                console.warn('Skryté pole input_8_36 neexistuje');
+                console.warn('Skryté pole input_7_36 neexistuje');
             }
-            if ($('#input_8_37').length) {
-                $('#input_8_37').val(hPostsWeight); // Hmotnosť H stĺpov (kg)
+            if ($('#input_7_37').length) {
+                $('#input_7_37').val(hPostsWeight); // Hmotnosť H stĺpov (kg)
             } else {
-                console.warn('Skryté pole input_8_37 neexistuje');
+                console.warn('Skryté pole input_7_37 neexistuje');
             }
-            if ($('#input_8_38').length) {
-                $('#input_8_38').val(uPostsWeight); // Hmotnosť U stĺpov (kg)
+            if ($('#input_7_38').length) {
+                $('#input_7_38').val(uPostsWeight); // Hmotnosť U stĺpov (kg)
             } else {
-                console.warn('Skryté pole input_8_38 neexistuje');
+                console.warn('Skryté pole input_7_38 neexistuje');
             }
-            if ($('#input_8_39').length) {
-                $('#input_8_39').val(formatNumber(totalWeightInTons)); // Celková hmotnosť (t)
+            if ($('#input_7_39').length) {
+                $('#input_7_39').val(formatNumber(totalWeightInTons)); // Celková hmotnosť (t)
             } else {
-                console.warn('Skryté pole input_8_39 neexistuje');
+                console.warn('Skryté pole input_7_39 neexistuje');
             }
 
             // Dynamické popisy
             var heightDesc = `Výška plota ${fenceHeight} cm`;
-            if ($('#description_8_18').length) {
-                $('#description_8_18').text(heightDesc);
+            if ($('#description_7_18').length) {
+                $('#description_7_18').text(heightDesc);
             } else {
-                $('#field_8_18').append('<div id="description_8_18" class="custom-description">' + heightDesc + '</div>');
+                $('#field_7_18').append('<div id="description_7_18" class="custom-description">' + heightDesc + '</div>');
             }
 
             var boardDesc = `${boardDims[0]} x ${boardDims[1]} x ${boardDims[2]} cm`;
-            if ($('#description_8_19').length) {
-                $('#description_8_19').text(boardDesc);
+            if ($('#description_7_19').length) {
+                $('#description_7_19').text(boardDesc);
             } else {
-                $('#field_8_19').append('<div id="description_8_19" class="custom-description">' + boardDesc + '</div>');
+                $('#field_7_19').append('<div id="description_7_19" class="custom-description">' + boardDesc + '</div>');
             }
-            if ($('#input_8_30').length) {
-                $('#input_8_30').val(boardDesc);
+            if ($('#input_7_30').length) {
+                $('#input_7_30').val(boardDesc);
             } else {
-                console.warn('Skryté pole input_8_30 neexistuje');
+                console.warn('Skryté pole input_7_30 neexistuje');
             }
 
             var hPostDesc = `16 x 16 x ${postHeight} cm`;
-            if ($('#description_8_20').length) {
-                $('#description_8_20').text(hPostDesc);
+            if ($('#description_7_20').length) {
+                $('#description_7_20').text(hPostDesc);
             } else {
-                $('#field_8_20').append('<div id="description_8_20" class="custom-description">' + hPostDesc + '</div>');
+                $('#field_7_20').append('<div id="description_7_20" class="custom-description">' + hPostDesc + '</div>');
             }
-            if ($('#input_8_31').length) {
-                $('#input_8_31').val(hPostDesc);
+            if ($('#input_7_31').length) {
+                $('#input_7_31').val(hPostDesc);
             } else {
-                console.warn('Skryté pole input_8_31 neexistuje');
+                console.warn('Skryté pole input_7_31 neexistuje');
             }
 
             var uPostDesc = `16 x 10 x ${postHeight} cm`;
-            if ($('#description_8_21').length) {
-                $('#description_8_21').text(uPostDesc);
+            if ($('#description_7_21').length) {
+                $('#description_7_21').text(uPostDesc);
             } else {
-                $('#field_8_21').append('<div id="description_8_21" class="custom-description">' + uPostDesc + '</div>');
+                $('#field_7_21').append('<div id="description_7_21" class="custom-description">' + uPostDesc + '</div>');
             }
-            if ($('#input_8_32').length) {
-                $('#input_8_32').val(uPostDesc);
+            if ($('#input_7_32').length) {
+                $('#input_7_32').val(uPostDesc);
             } else {
-                console.warn('Skryté pole input_8_32 neexistuje');
+                console.warn('Skryté pole input_7_32 neexistuje');
             }
 
             // Generovanie SVG nákresu

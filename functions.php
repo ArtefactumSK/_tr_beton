@@ -211,7 +211,7 @@ function set_language_field( $form ) {
 /*GF7 - kalkulacia*/
 add_action('wp_enqueue_scripts', function() {
     // Načítanie skriptu len na stránke s formulárom
-    if (is_page('online-kalkulacia') || is_page('calculation-online/')) { // Uprav podľa slug-u alebo ID stránky
+    if (is_page('online-kalkulacia') || is_page('calculation-online/') || is_page('calc-test/')) { // Uprav podľa slug-u alebo ID stránky
         wp_enqueue_script(
             'custom-fence-calc', // Unikátny handle
             get_stylesheet_directory_uri() . '/js/fence-calc.js', // Cesta k súboru
